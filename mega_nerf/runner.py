@@ -149,7 +149,7 @@ class Runner:
                 scale_factor = ((used_positions.to(self.device) - self.sphere_center) / self.sphere_radius).norm(
                     dim=-1).max()
 
-                self.sphere_radius *= (scale_factor * hparams.ellipse_scale_factor)
+                self.sphere_radius *= (scale_factor * hparams.ellipse_scale_factor) # 这里计算不同方向的半径，后面除以这个半径就是椭圆了，可以想象一下椭圆方程
             else:
                 self.sphere_center = None
                 self.sphere_radius = None

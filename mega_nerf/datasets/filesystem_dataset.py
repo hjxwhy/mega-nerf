@@ -52,7 +52,7 @@ class FilesystemDataset(Dataset):
             self._directions = None
 
         parquet_paths = self._check_existing_paths(chunk_paths, center_pixels, scale_factor,
-                                                   len(metadata_items))
+                                                   len(metadata_items)) # chunk_paths这个要给一个还没创建的文件夹
         if parquet_paths is not None:
             main_print('Reusing {} chunks from previous run'.format(len(parquet_paths)))
             self._parquet_paths = parquet_paths
@@ -141,7 +141,7 @@ class FilesystemDataset(Dataset):
         for chunk_path in chunk_paths:
             chunk_path.mkdir(parents=True)
 
-            _, _, free = shutil.disk_usage(chunk_path)
+            _, _, free = shutil.disk_usage(chunk_path) #返回这个路径文件夹的可用空间
             total_free += free
             path_frees.append(free)
 
@@ -149,7 +149,7 @@ class FilesystemDataset(Dataset):
 
         index = 0
 
-        max_index = max(metadata_items, key=lambda x: x.image_index).image_index
+        max_index = max(metadata_items, key=lambda x: x.image_index).image_index #最大的图片索引
         if max_index <= np.iinfo(np.uint16).max:
             img_indices_dtype = np.uint16
         else:
@@ -203,13 +203,13 @@ class FilesystemDataset(Dataset):
                 indices.append(img_indices)
                 in_memory_count += len(image_rgbs)
 
-                if self._directions is not None:
+                if self._directions is not None: # 如果所有相机内参都是一样的，就提前把direction算好，取有意义的方向的index
                     image_pixel_indices = all_pixel_indices
                     if image_keep_mask is not None:
                         image_pixel_indices = image_pixel_indices[image_keep_mask == True]
 
                     rays.append(image_pixel_indices)
-                else:
+                else:#如果相机内参不一样了，就要提前把有用的像素的direction算好保存下来
                     directions = get_ray_directions(metadata_item.W,
                                                     metadata_item.H,
                                                     metadata_item.intrinsics[0],
@@ -303,7 +303,7 @@ class FilesystemDataset(Dataset):
 
     def _write_to_disk(self, executor: ThreadPoolExecutor, rgbs: torch.Tensor, rays: torch.FloatTensor,
                        img_indices: torch.Tensor, parquet_writers: List[pq.ParquetWriter],
-                       img_indices_dtype: Type[Union[np.ushort, np.int]]) -> List[Future[None]]:
+                       img_indices_dtype: Type[Union[np.ushort, np.int]]) -> List[Future]:
         indices = torch.randperm(rgbs.shape[0])
         shuffled_rgbs = rgbs[indices]
         shuffled_rays = rays[indices]

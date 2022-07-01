@@ -9,7 +9,7 @@ def get_rgb_index_mask(metadata: ImageMetadata) -> Optional[
     Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]]:
     rgbs = metadata.load_image().view(-1, 3)
 
-    keep_mask = metadata.load_mask()
+    keep_mask = metadata.load_mask() # 这里训练是每个region单独训练的，所以数据加载的时候也是单独加载的每个region的mask，
 
     if metadata.is_val:
         if keep_mask is None:
@@ -29,7 +29,7 @@ def get_rgb_index_mask(metadata: ImageMetadata) -> Optional[
         keep_mask[:, metadata.W // 2:] = False
 
     if keep_mask is not None:
-        if keep_mask[keep_mask == True].shape[0] == 0:
+        if keep_mask[keep_mask == True].shape[0] == 0: # 如果这个的所有像素和这个region完全没有关系，这个mask就都是false，就返回None
             return None
 
         keep_mask = keep_mask.view(-1)

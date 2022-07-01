@@ -2,7 +2,12 @@ from argparse import Namespace
 
 import torch
 from torch.distributed.elastic.multiprocessing.errors import record
-
+import sys
+from pathlib import Path
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[0].parents[0]  
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))  # add ROOT to PATH
 from mega_nerf.opts import get_opts_base
 from mega_nerf.runner import Runner
 

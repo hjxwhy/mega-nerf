@@ -38,7 +38,7 @@ def render_rays(nerf: nn.Module,
 
         rays_o = rays_o.view(rays_o.shape[0], 1, rays_o.shape[1])
         rays_d = rays_d.view(rays_d.shape[0], 1, rays_d.shape[1])
-
+        # 这里和nerf++不一样的，这里只render包含背景的Ray，nerf++对所有Ray都有背景的渲染
         if rays_with_bg.shape[0] > 0:
             last_delta[rays_with_bg, 0] = fg_far[rays_with_bg]
 
