@@ -323,18 +323,24 @@ def read_model(path, ext=""):
 def _get_opts() -> Namespace:
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--model_path', type=str, required=True, help='Path to PixSFM/COLMAP model')
-    parser.add_argument('--images_path', type=str, required=True, help='Path to images')
-    parser.add_argument('--output_path', type=str, required=True, help='Path to write converted dataset to')
-    parser.add_argument('--scale', type=float, required=True,
-                        help='Scale all poses by this factor. You generally want this to be between [-1, 1]')
+    parser.add_argument('--model_path', type=str, default='/home/hjx/Documents/0134_colmap/no_scale_sparse', help='Path to PixSFM/COLMAP model')
+    parser.add_argument('--images_path', type=str, default='/home/hjx/Documents/0134_colmap/images', help='Path to images')
+    parser.add_argument('--output_path', type=str, default='/home/hjx/Documents/mega_dji', help='Path to write converted dataset to')
+    # parser.add_argument('--scale', type=float, required=True,
+    #                     help='Scale all poses by this factor. You generally want this to be between [-1, 1]')
     parser.add_argument('--num_val', type=int, default=20, help='Number of images to hold out in validation set')
 
     return parser.parse_args()
 
 
 def main(hparams: Namespace) -> None:
-    cameras, images, _ = read_model(hparams.model_path)
+    cameras, images, point3ds = read_model(hparams.model_path)
+    points = []
+    for point3d in point3ds.values():
+        points.append(point3d.xyz)
+    points = np.array(points)
+    near = np.percentile(points[:, -1], 0.05)
+    far = np.percentile(points[:, -1], 0.95)
 
     c2ws = {}
     for image in images.values():
@@ -342,11 +348,13 @@ def main(hparams: Namespace) -> None:
         w2c[:3, :3] = torch.FloatTensor(qvec2rotmat(image.qvec))
         w2c[:3, 3] = torch.FloatTensor(image.tvec)
         c2w = torch.inverse(w2c)
-
-        c2w = torch.hstack((
-            RDF_TO_DRB @ c2w[:3, :3] @ torch.inverse(RDF_TO_DRB),
-            RDF_TO_DRB @ c2w[:3, 3:]
-        ))
+        ## change to original LLFF coordinate change 
+        ## https://github.com/Fyusion/LLFF/blob/c6e27b1ee59cb18f054ccb0f87a90214dbe70482/llff/poses/pose_utils.py#L51
+        c2w = torch.hstack([c2w[:3, 1:2], c2w[:3, 0:1], -c2w[:3, 2:3], c2w[:3, 3:]])
+        # c2w = torch.hstack((
+        #     RDF_TO_DRB @ c2w[:3, :3] @ torch.inverse(RDF_TO_DRB),
+        #     RDF_TO_DRB @ c2w[:3, 3:]
+        # ))
 
         c2ws[image.id] = c2w
 
@@ -357,20 +365,26 @@ def main(hparams: Namespace) -> None:
     origin = ((max_values + min_values) * 0.5)
     dist = (positions - origin).norm(dim=-1)
     diagonal = dist.max()
-
+    # scale = np.abs(max_values - origin).max()
+    scale = diagonal
+    hparams.scale = scale
     print(origin, diagonal, max_values, min_values)
     coordinates = {
         'origin_drb': origin,
-        'pose_scale_factor': hparams.scale
+        'pose_scale_factor': scale, 
+        'near_far': torch.FloatTensor([near, far])
     }
 
-    output_path = Path(hparams.output_path)
-    output_path.mkdir(parents=True)
-    (output_path / 'train' / 'metadata').mkdir(parents=True)
-    (output_path / 'val' / 'metadata').mkdir(parents=True)
+    print('scale= {}, near= {}, far= {}'.format(scale, near, far))
+    print('near/scale= {}, far/scale= {}'.format(near/scale, far/scale))
 
-    (output_path / 'train' / 'rgbs').mkdir(parents=True)
-    (output_path / 'val' / 'rgbs').mkdir(parents=True)
+    output_path = Path(hparams.output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    (output_path / 'train' / 'metadata').mkdir(parents=True, exist_ok=True)
+    (output_path / 'val' / 'metadata').mkdir(parents=True, exist_ok=True)
+
+    (output_path / 'train' / 'rgbs').mkdir(parents=True, exist_ok=True)
+    (output_path / 'val' / 'rgbs').mkdir(parents=True, exist_ok=True)
 
     images_path = Path(hparams.images_path)
 
@@ -386,15 +400,17 @@ def main(hparams: Namespace) -> None:
             camera = cameras[image.camera_id]
 
             # TODO: make camera model more flexible - should mainly involve changing the camera matrix accordingly
-            assert camera.model == 'SIMPLE_RADIAL', camera.model
+            # assert camera.model == 'SIMPLE_RADIAL', camera.model
 
-            camera_matrix = np.array([[camera.params[0], 0, camera.params[1]],
-                                      [0, camera.params[0], camera.params[2]],
+            camera_matrix = np.array([[camera.params[0], 0, camera.params[2]],
+                                      [0, camera.params[1], camera.params[3]],
                                       [0, 0, 1]])
+            distortion = camera.params[4:]
 
-            distortion = np.array([camera.params[3], 0, 0, 0])
+            # distortion = np.array([camera.params[3], 0, 0, 0])
             undistorted = cv2.undistort(distorted, camera_matrix, distortion)
-            cv2.imwrite(str(split_dir / 'rgbs' / '{0:06d}.jpg'.format(i)), undistorted)
+            # cv2.imwrite(str(split_dir / 'rgbs' / '{0:06d}.jpg'.format(i)), undistorted)
+            cv2.imwrite(str(split_dir / 'rgbs' / '{0:06d}.jpg'.format(i)), distorted) # my question, my image have been undistorted
 
             camera_in_drb = c2ws[image.id]
             camera_in_drb[:, 3] = (camera_in_drb[:, 3] - origin) / hparams.scale

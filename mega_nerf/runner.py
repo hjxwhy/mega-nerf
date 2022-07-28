@@ -27,6 +27,7 @@ from tqdm import tqdm
 
 from mega_nerf.datasets.filesystem_dataset import FilesystemDataset
 from mega_nerf.datasets.memory_dataset import MemoryDataset
+from mega_nerf.datasets.dataset_utils import get_rgb_index_mask
 from mega_nerf.image_metadata import ImageMetadata
 from mega_nerf.metrics import psnr, ssim, lpips
 from mega_nerf.misc_utils import main_print, main_tqdm
@@ -95,7 +96,7 @@ class Runner:
 
         if self.hparams.cluster_mask_path is not None:
             cluster_params = torch.load(Path(self.hparams.cluster_mask_path).parent / 'params.pt', map_location='cpu')
-            assert cluster_params['near'] == self.near
+            assert torch.allclose(cluster_params['near'], self.near, 10-3, 10-3)
             assert (torch.allclose(cluster_params['origin_drb'], self.origin_drb))
             assert cluster_params['pose_scale_factor'] == self.pose_scale_factor
 
@@ -230,9 +231,9 @@ class Runner:
                 sampler = DistributedSampler(dataset, world_size, int(os.environ['RANK']))
                 assert self.hparams.batch_size % world_size == 0
                 data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size // world_size, sampler=sampler,
-                                         num_workers=0, pin_memory=True)
+                                         num_workers=6, pin_memory=True)
             else:
-                data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=0,
+                data_loader = DataLoader(dataset, batch_size=self.hparams.batch_size, shuffle=True, num_workers=6,
                                          pin_memory=True)
 
             for dataset_index, item in enumerate(data_loader):
@@ -630,6 +631,14 @@ class Runner:
             in train_paths]
         val_items = [
             self._get_metadata_item(x, image_indices[x.name], self.hparams.val_scale_factor, True) for x in val_paths]
+        val_items_tmp = []
+        for item in val_items:
+            mask = item.load_mask()
+            if mask[mask==True].shape[0] < 25000:
+                continue
+            val_items_tmp.append(item)
+        val_items = val_items_tmp
+        del val_items_tmp
 
         return train_items, val_items
 

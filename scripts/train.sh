@@ -1,0 +1,13 @@
+python mega_nerf/train.py --config_file /home/hjx/copy-from/mega-nerf/configs/nerf/building.yaml \
+                          --exp_name fist_block \
+                          --dataset_path /home/hjx/Documents/mega_dji \
+                          --chunk_paths /home/hjx/Documents/mega_dji/scratch/0 \
+                          --cluster_mask_path /home/hjx/Documents/mega_dji/mask/0 \
+                          --train_scale_factor 2 \
+                          --val_scale_factor 2 \
+                          --near 1.4717059899999998 \
+                          --far 3.6356568399999993 \
+                          --val_interval 5 \
+                          --batch_size 1536 \
+                          --image_pixel_batch_size 131072 \
+                          --model_chunk_size 131072
